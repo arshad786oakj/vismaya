@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>A Surprise</title>
+    <style>
+        /* =========================
+           BASE & VARIABLES
+           ========================= */
+        :root {
+            --bg-deep: #050505;
+            --bg-charcoal: #121212;
+            --text-main: #e6e6e6;
+            --text-dim: #888888;
+            --accent-gold: #c5a059;
+            --accent-glow: rgba(197, 160, 89, 0.15);
+            --paper-light: #f9f6f0;
+            --paper-dark: #eee9dd;
+            
+            --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            --font-serif: "Georgia", "Times New Roman", serif;
+            
+            --transition-slow: 2s cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-med: 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: var(--bg-deep);
+            color: var(--text-main);
+            font-family: var(--font-sans);
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        .watermark {
+            position: fixed;
+            bottom: 2vh;
+            right: 4vw;
+            font-size: 10px;
+            letter-spacing: 4px;
+            color: var(--accent-gold);
+            opacity: 0.2;
+            z-index: 9999;
+            pointer-events: none;
+            text-transform: uppercase;
+            transition: opacity 2s ease;
+        }
+
+        /* =========================
+           STAGE CONTAINERS
+           ========================= */
+        .stage {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity var(--transition-slow), transform var(--transition-slow);
+            z-index: 10;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .stage.active {
+            opacity: 1;
+            pointer-events: auto;
+            transform: scale(1);
+        }
+
+        .stage.hidden {
+            transform: scale(1.05);
+        }
+
+        /* =========================
+           TYPOGRAPHY & UI
+           ========================= */
+        h1, h2, h3, .serif-text {
+            font-family: var(--font-serif);
+            font-weight: normal;
+        }
+
+        .tiny-text {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 2vh;
+            opacity: 0;
+            animation: fadeIn 2s forwards;
+        }
+
+        .main-text {
+            font-size: 1.5rem;
+            line-height: 1.6;
+            margin-bottom: 4vh;
+            opacity: 0;
+            font-family: var(--font-serif);
+        }
+
+        .large-text {
+            font-size: 2.5rem;
+            letter-spacing: 4px;
+            color: var(--accent-gold);
+            margin: 2vh 0;
+        }
+
+        .btn {
+            background: transparent;
+            border: 1px solid rgba(197, 160, 89, 0.3);
+            color: var(--accent-gold);
+            padding: 12px 32px;
+            font-size: 0.9rem;
+            letter-spacing: 2px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.4s ease;
+            box-shadow: 0 0 15px var(--accent-glow);
+            font-family: var(--font-sans);
+            text-transform: uppercase;
+            outline: none;
+            opacity: 0;
+            animation: fadeIn 2s 2s forwards;
+        }
+
+        .btn:active, .btn:focus {
+            background: rgba(197, 160, 89, 0.1);
+            transform: scale(0.98);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes pulseGlow {
+            0% { box-shadow: 0 0 15px var(--accent-glow); }
+            50% { box-shadow: 0 0 25px rgba(197, 160, 89, 0.3); }
+            100% { box-shadow: 0 0 15px var(--accent-glow); }
+        }
+
+        .ambient-light {
+            position: absolute;
+            width: 50vw;
+            height: 50vw;
+            background: radial-gradient(circle, rgba(197, 160, 89, 0.05) 0%, transparent 70%);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        /* =========================
+           COMPONENTS (Envelopes & Boxes)
+           ========================= */
+        .css-envelope-container {
+            width: 280px;
+            height: 180px;
+            position: relative;
+            perspective: 1000px;
+            margin-bottom: 40px;
+            cursor: pointer;
+            opacity: 0;
+        }
+
+        .css-envelope {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            transform-style: preserve-3d;
+            transition: transform 1s ease;
+        }
+
+        .env-part {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-charcoal);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        .env-back { z-index: 1; }
+        
+        .env-card {
+            position: absolute;
+            width: 90%;
+            height: 90%;
+            left: 5%;
+            top: 5%;
+            background: var(--paper-light);
+            z-index: 2;
+            transition: transform 1.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) 0.5s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 15px;
+            color: #111;
+            text-align: center;
+            font-family: var(--font-serif);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            border-radius: 2px;
+        }
+
+        .env-front-left {
+            z-index: 3;
+            clip-path: polygon(0 0, 50% 50%, 0 100%);
+            background: #151515;
+        }
+        .env-front-right {
+            z-index: 3;
+            clip-path: polygon(100% 0, 100% 100%, 50% 50%);
+            background: #161616;
+        }
+        .env-front-bottom {
+            z-index: 4;
+            clip-path: polygon(0 100%, 50% 50%, 100% 100%);
+            background: #181818;
+        }
+        
+        .env-flap {
+            z-index: 5;
+            clip-path: polygon(0 0, 100% 0, 50% 50%);
+            background: #1a1a1a;
+            transform-origin: top;
+            transition: transform 1s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            justify-content: center;
+        }
+
+        .env-text {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            font-size: 0.7rem;
+            letter-spacing: 2px;
+            color: var(--accent-gold);
+            z-index: 6;
+            pointer-events: none;
+        }
+
+        /* Open state */
+        .css-envelope-container.open .env-flap {
+            transform: rotateX(180deg);
+            z-index: 1;
+        }
+        .css-envelope-container.open .env-card {
+            transform: translateY(-80px);
+            z-index: 6;
+        }
+
+        /* Memory Box Envelopes Grid */
+        .envelope-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+            max-width: 600px;
+            margin-top: 30px;
+            opacity: 0;
+            transition: opacity 1s ease;
+        }
+
+        .mini-env {
+            width: 140px;
+            height: 90px;
+            background: linear-gradient(135deg, #1c1c1c, #111);
+            border: 1px solid rgba(197, 160, 89, 0.2);
+            position: relative;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 10px;
+            border-radius: 4px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+            transition: all 0.3s ease;
+        }
+
+        .mini-env::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: 
+                linear-gradient(to bottom right, transparent 49%, rgba(197,160,89,0.1) 50%, transparent 51%),
+                linear-gradient(to top right, transparent 49%, rgba(197,160,89,0.1) 50%, transparent 51%);
+            pointer-events: none;
+        }
+
+        .mini-env span {
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            font-family: var(--font-serif);
+            pointer-events: none;
+            transition: color 0.3s;
+        }
+
+        .mini-env:active { transform: scale(0.95); }
+        .mini-env.opened {
+            border-color: rgba(255,255,255,0.05);
+            background: #0a0a0c;
+        }
+        .mini-env.opened span { color: #333; }
+
+        /* Reading Modal */
+        .reading-modal {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(5, 5, 5, 0.95);
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 30px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.5s ease;
+            backdrop-filter: blur(10px);
+        }
+
+        .reading-modal.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .reading-content {
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+            transform: translateY(20px);
+            transition: transform 0.5s ease;
+        }
+        .reading-modal.active .reading-content { transform: translateY(0); }
+
+        .reading-text {
+            font-family: var(--font-serif);
+            font-size: 1.2rem;
+            line-height: 1.8;
+            color: var(--text-main);
+            margin-bottom: 40px;
+        }
+
+        .reading-text .highlight {
+            font-size: 2rem;
+            color: var(--accent-gold);
+            display: block;
+            margin: 20px 0;
+            letter-spacing: 2px;
+        }
+
+        /* The Big Letter */
+        .letter-container {
+            width: 90%;
+            max-width: 600px;
+            height: 80vh;
+            background: linear-gradient(135deg, var(--paper-light), var(--paper-dark));
+            color: #1a1a1a;
+            padding: 40px 30px;
+            border-radius: 2px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8), inset 0 0 60px rgba(0,0,0,0.05);
+            overflow-y: auto;
+            position: relative;
+            transform: translateY(100vh);
+            opacity: 0;
+            transition: transform 1.5s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 1.5s ease;
+        }
+
+        .letter-container.open {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .letter-content {
+            font-family: var(--font-serif);
+            font-size: 1.1rem;
+            line-height: 2;
+            text-align: left;
+        }
+
+        .letter-content p { margin-bottom: 20px; }
+        
+        .letter-content .signature {
+            margin-top: 40px;
+            font-style: italic;
+            text-align: right;
+            font-size: 1.2rem;
+        }
+
+        /* Custom Scrollbar for letter */
+        .letter-container::-webkit-scrollbar { width: 4px; }
+        .letter-container::-webkit-scrollbar-track { background: transparent; }
+        .letter-container::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.2); }
+
+        /* Final Locked Box */
+        .locked-box {
+            width: 80px;
+            height: 60px;
+            border: 2px solid var(--accent-gold);
+            border-radius: 4px;
+            position: relative;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: all 0.5s ease;
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+        
+        .locked-box::after {
+            content: '';
+            width: 10px;
+            height: 15px;
+            border: 2px solid var(--accent-gold);
+            border-bottom: none;
+            border-radius: 5px 5px 0 0;
+            position: absolute;
+            top: -15px;
+            transition: transform 0.5s;
+        }
+
+        .locked-box.open::after {
+            transform: translateY(-5px) rotate(45deg);
+            transform-origin: bottom right;
+        }
+
+        /* Utilities */
+        .delay-1 { animation-delay: 2s; }
+        .delay-2 { animation-delay: 4s; }
+        .delay-3 { animation-delay: 6s; }
+        
+        .fade-in-seq {
+            opacity: 0;
+            transition: opacity 1.5s ease;
+        }
+        .fade-in-seq.visible { opacity: 1; }
+
+        .ps-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-dim);
+            font-size: 0.8rem;
+            cursor: pointer;
+            margin-top: 40px;
+            opacity: 0;
+            transition: color 0.3s;
+            font-family: var(--font-serif);
+            letter-spacing: 1px;
+        }
+        .ps-btn.visible { opacity: 1; animation: pulseGlow 3s infinite; }
+        .ps-btn:active { color: var(--text-main); }
+
+        /* Responsive */
+        @media (max-width: 480px) {
+            .large-text { font-size: 1.8rem; }
+            .main-text { font-size: 1.2rem; }
+            .letter-container { padding: 30px 20px; }
+            .letter-content { font-size: 1rem; line-height: 1.8; }
+            .reading-text { font-size: 1.1rem; }
+            .reading-text .highlight { font-size: 1.5rem; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+                scroll-behavior: auto !important;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- =========================
+         EASY CUSTOMIZATION (JS CONFIG OVERRIDES THIS, BUT HTML IS SEMANTIC)
+         ========================= -->
+    
+    <div id="canvas-container">
+        <canvas id="particles"></canvas>
+    </div>
+    
+    <div class="ambient-light"></div>
+
+    <div class="watermark" id="watermarkText">ARSHAD</div>
+
+    <!-- OPENING SCREEN -->
+    <section class="stage active" id="stage-00">
+        <div class="tiny-text">SOMEONE LEFT YOU SOMETHING.</div>
+        <div class="tiny-text delay-1">And it's not what you think.</div>
+        <button class="btn delay-2" onclick="nextStage('stage-01')">OPEN YOUR SURPRISE</button>
+    </section>
+
+    <!-- STAGE 01 - THE ENVELOPE -->
+    <section class="stage" id="stage-01">
+        <div class="css-envelope-container" id="first-envelope" onclick="openFirstEnvelope()">
+            <div class="css-envelope">
+                <div class="env-part env-back"></div>
+                <div class="env-card" style="font-size: 0.9rem;">
+                    “Before you read anything...<br><br>promise me you'll stay until the end.”
+                </div>
+                <div class="env-part env-front-left"></div>
+                <div class="env-part env-front-right"></div>
+                <div class="env-part env-front-bottom"></div>
+                <div class="env-part env-flap"></div>
+            </div>
+            <div class="env-text">FOR SOMEONE SPECIAL<br><br>OPEN</div>
+        </div>
+        <button class="btn" id="promise-btn" style="display: none; margin-top: 40px; animation: fadeIn 1s forwards;" onclick="nextStage('stage-02')">I PROMISE</button>
+    </section>
+
+    <!-- STAGE 02 - FIRST REVEAL -->
+    <section class="stage" id="stage-02">
+        <div class="tiny-text fade-in-seq seq-02">Okay.</div>
+        <div class="tiny-text fade-in-seq seq-02">Now I can tell you who this is for.</div>
+        <div class="large-text fade-in-seq seq-02" style="margin-top:40px;"><span id="revealName">VISMAYA</span></div>
+        <div class="tiny-text fade-in-seq seq-02">my sister from another mother.</div>
+        <div class="main-text fade-in-seq seq-02" style="margin-top:30px;">“Not by blood. By bond.”</div>
+    </section>
+
+    <!-- STAGE 03 - TRANSITION -->
+    <section class="stage" id="stage-03">
+        <div class="tiny-text fade-in-seq seq-03">Wait.</div>
+        <div class="main-text fade-in-seq seq-03">This isn't really a website.</div>
+        <div class="main-text fade-in-seq seq-03">It's something I wanted you to open.</div>
+        <div class="main-text fade-in-seq seq-03">Something I wanted you to keep.</div>
+        <button class="btn fade-in-seq seq-03" onclick="nextStage('stage-04')">START THE SURPRISE</button>
+    </section>
+
+    <!-- STAGE 04 - MEMORY BOX -->
+    <section class="stage" id="stage-04">
+        <div id="box-intro">
+            <div class="tiny-text" style="opacity:1; animation:none;">THERE'S MORE INSIDE.</div>
+            <button class="btn" style="opacity:1; animation:none; margin-top: 20px;" onclick="openBox()">OPEN THE BOX</button>
+        </div>
+        <div class="envelope-grid" id="env-grid">
+            <!-- Populated by JS -->
+        </div>
+    </section>
+
+    <!-- STAGE 05 - THE BIG REVEAL -->
+    <section class="stage" id="stage-05">
+        <div id="big-reveal-intro">
+            <div class="tiny-text fade-in-seq seq-05">You opened everything...</div>
+            <div class="tiny-text fade-in-seq seq-05">Except one thing.</div>
+            
+            <div class="css-envelope-container fade-in-seq seq-05" style="margin: 40px auto 0; cursor:default; opacity:1;">
+                <div class="css-envelope">
+                    <div class="env-part env-back"></div>
+                    <div class="env-part env-front-left"></div>
+                    <div class="env-part env-front-right"></div>
+                    <div class="env-part env-front-bottom"></div>
+                    <div class="env-part env-flap"></div>
+                </div>
+                <div class="env-text"><span id="bigEnvName">VISMAYA</span><br><br>From <span id="bigEnvSender">Arshad</span></div>
+            </div>
+            
+            <button class="btn fade-in-seq seq-05" style="margin-top: 40px;" onclick="openBigLetter()">OPEN MY LETTER</button>
+        </div>
+
+        <div class="letter-container" id="big-letter">
+            <div class="letter-content" id="letter-text-content">
+                <!-- Content injected via JS to keep HTML clean, though it's here in code -->
+            </div>
+            <button class="btn" style="opacity:1; animation:none; margin-top: 40px; border-color: #aaa; color: #333; box-shadow: none;" onclick="closeBigLetter()">FOLD LETTER</button>
+        </div>
+    </section>
+
+    <!-- STAGE 06 - FINAL BOX -->
+    <section class="stage" id="stage-06">
+        <div class="tiny-text fade-in-seq seq-06">“You thought that was the surprise?”</div>
+        <div class="tiny-text fade-in-seq seq-06">“One last thing.”</div>
+        
+        <div class="locked-box fade-in-seq seq-06" style="margin: 40px auto;" onclick="openFinalBox(this)">
+            <span style="position: absolute; width: 150px; text-align: center; bottom: -30px; font-size: 0.6rem; color: var(--text-dim); letter-spacing: 1px;">OPEN WHEN YOU'RE READY</span>
+        </div>
+    </section>
+
+    <!-- FINAL SCREEN -->
+    <section class="stage" id="stage-final">
+        <div class="main-text fade-in-seq seq-final">“Some families are given to us.”</div>
+        <div class="main-text fade-in-seq seq-final">“Some families are found.”</div>
+        <div class="large-text fade-in-seq seq-final">I'M GLAD I FOUND YOU.</div>
+        <div class="large-text fade-in-seq seq-final" style="font-size: 2rem;">ALWAYS MY SISTER.</div>
+        <div class="tiny-text fade-in-seq seq-final" style="margin-top: 20px;"><span id="finalNames">Vismaya × Arshad</span></div>
+        <div class="main-text fade-in-seq seq-final">“Different mothers. Same family.”</div>
+        
+        <button class="ps-btn" id="psButton" onclick="showPS()">P.S.</button>
+    </section>
+
+    <!-- READING MODAL FOR MINI ENVELOPES -->
+    <div class="reading-modal" id="reading-modal">
+        <div class="reading-content">
+            <div class="reading-text" id="reading-text"></div>
+            <button class="btn" style="opacity:1; animation:none;" onclick="closeReadingModal()">CLOSE</button>
+        </div>
+    </div>
+
+    <!-- P.S. MODAL -->
+    <div class="reading-modal" id="ps-modal">
+        <div class="reading-content">
+            <div class="reading-text serif-text">
+                <span id="secretMessageText"></span>
+                <br><br>
+                <span style="font-size: 0.9rem; color: var(--text-dim);">“I'll probably still be annoying you.” <br>🤍</span>
+            </div>
+            <button class="btn" style="opacity:1; animation:none;" onclick="document.getElementById('ps-modal').classList.remove('active'); document.getElementById('watermarkText').innerHTML = 'Made with love,<br>ARSHAD<br>for Vismaya.'; document.getElementById('watermarkText').style.opacity = '0.5'; document.getElementById('watermarkText').style.fontSize = '12px';">CLOSE</button>
+        </div>
+    </div>
+
+
+    <!-- =========================
+         JAVASCRIPT LOGIC
+         ========================= -->
+    <script>
+        /* =========================
+           EASY CUSTOMIZATION
+           ========================= */
+        const CONFIG = {
+            recipientName: "Vismaya",
+            senderName: "Arshad",
+            secretMessage: "If you ever forget how much you mean to me, come back here."
+        };
+
+        const ENVELOPES_DATA = [
+            {
+                title: "For the laughs",
+                content: "“I don't think we'll ever understand why some of the stupidest moments became some of the memories I value most.<br><br>Maybe that's the best part.<br><br>We didn't need perfect moments.<br><br>We just needed moments that were ours.”<br><br><span style='font-size:0.9rem; color:#888;'>And honestly, I'd take the chaos again.</span>"
+            },
+            {
+                title: "For the chaos",
+                content: "“We've annoyed each other.<br><br>We've probably tested each other's patience more times than we should admit.<br><br>We've had stupid arguments, stupid jokes, and completely unnecessary conversations.<br><br>But somewhere inside all that chaos was something I never want to lose.<br><br>The comfort of knowing you're family.”<br><br><span style='font-size:0.9rem; color:#888;'>Even when you're annoying.</span><br><span style='font-size:0.6rem; color:#555;'>(which is often.)</span>"
+            },
+            {
+                title: "For the things I never say",
+                content: "<span style='font-size:0.9rem; color:#888;'>This one is harder.</span><br><br>“I don't always say how much you mean to me.<br><br>Sometimes I hide serious things behind jokes.<br><br>Sometimes I act like I don't care because saying that I do feels awkward.<br><br>But if you ever wonder whether you matter to me…<br><br>please don't.”<br><span class='highlight'>YOU DO.</span>“More than I probably know how to explain.”"
+            },
+            {
+                title: "For the days you need someone",
+                content: "“There will be days when everything feels too much.<br><br>Days when you question yourself.<br><br>Days when you feel like nobody understands.<br><br>On those days, I hope you remember this little website.<br><br>Not because a website can fix anything.<br><br>But because behind these words is someone who genuinely wants you to be okay.”<br><br><span style='font-size:0.9rem; color:#888;'>You don't have to handle everything alone.</span>"
+            },
+            {
+                title: "For everything that comes next",
+                content: "“We don't know what the future is going to look like.<br><br>Life changes.<br><br>People grow.<br><br>Roads separate and sometimes cross again.<br><br>But I hope no matter where life takes us, we never become strangers.”<br><br><span style='font-size:0.9rem; color:#888;'>Because I'd hate for the person I call my sister to ever become just a memory.</span>"
+            }
+        ];
+
+        const LETTER_CONTENT = `
+            Dear ${CONFIG.recipientName},<br><br>
+            I don't really know where to begin, because some people become so important to you that putting what they mean into words feels almost impossible.<br><br>
+            You came into my life as someone who wasn't technically my sister, and somehow, somewhere along the way, you became exactly that.<br><br>
+            Maybe we don't share the same parents.<br>
+            Maybe we don't share the same blood.<br>
+            But honestly, I've never felt like that's what makes someone family.<br><br>
+            Family is the person you can be completely stupid with.<br>
+            The person you can annoy endlessly.<br>
+            The person you can argue with and still care about.<br>
+            The person whose happiness genuinely matters to you.<br><br>
+            And for me, that's you.<br><br>
+            I know I don't always say how much you mean to me.<br>
+            Sometimes I joke around.<br>
+            Sometimes I annoy you.<br>
+            Sometimes I probably make it look like I don't care.<br><br>
+            But if you ever wonder whether you matter to me—<br>
+            please don't.<br><br>
+            You do.<br>
+            More than I probably know how to explain.<br><br>
+            There are so many little moments between us that probably look ordinary from the outside.<br>
+            The random conversations.<br>
+            The stupid laughs.<br>
+            The teasing.<br>
+            The arguments.<br>
+            The moments where we didn't even need to say much.<br><br>
+            Those are the things I treasure.<br><br>
+            I hope life gives you everything you deserve.<br>
+            I hope you meet people who appreciate your heart, protect your peace, and remind you how special you are whenever you forget.<br>
+            And when life isn't kind to you, I hope you remember that you never have to face everything alone.<br><br>
+            Because no matter how much life changes, how far we go, or how busy things get, there will always be a part of me that looks at you and thinks:<br><br>
+            “That's my sister.”<br><br>
+            Not by blood.<br>
+            Not by name.<br>
+            But by everything that actually matters.<br><br>
+            I'm genuinely grateful that life gave me a sister like you.<br>
+            And if I could choose my family all over again…<br><br>
+            I'd still choose you.<br><br>
+            So, ${CONFIG.recipientName}…<br><br>
+            Thank you for being you.<br>
+            Thank you for being part of my life.<br>
+            And thank you for becoming family without ever needing to be asked.<br><br>
+            You're my sister from another mother.<br>
+            But you're still my sister.<br>
+            And that's something I'll always be grateful for.<br>
+            <div class="signature">— Your brother,<br>${CONFIG.senderName}</div>
+        `;
+
+        // Initialize customizations
+        document.getElementById('revealName').innerText = CONFIG.recipientName;
+        document.getElementById('bigEnvName').innerText = CONFIG.recipientName;
+        document.getElementById('bigEnvSender').innerText = CONFIG.senderName;
+        document.getElementById('finalNames').innerText = `${CONFIG.recipientName} × ${CONFIG.senderName}`;
+        document.getElementById('letter-text-content').innerHTML = LETTER_CONTENT;
+        document.getElementById('secretMessageText').innerText = `“${CONFIG.secretMessage}”`;
+
+        // --- Logic & State ---
+        
+        // Haptics helper
+        function vibrate() {
+            if (navigator.vibrate) navigator.vibrate(50);
+        }
+
+        // Sequence Animations
+        function playSequence(className, delaysArray) {
+            const elements = document.querySelectorAll(`.${className}`);
+            elements.forEach((el, index) => {
+                setTimeout(() => {
+                    el.classList.add('visible');
+                    vibrate();
+                }, delaysArray[index] || (index * 2000));
+            });
+        }
+
+        function nextStage(stageId) {
+            vibrate();
+            // Hide current
+            document.querySelector('.stage.active').classList.remove('active');
+            document.querySelector('.stage.active')?.classList.add('hidden');
+            
+            // Show next
+            const next = document.getElementById(stageId);
+            next.classList.remove('hidden');
+            next.classList.add('active');
+
+            // Trigger specific animations based on stage
+            if(stageId === 'stage-01') {
+                setTimeout(() => { document.getElementById('first-envelope').style.opacity = '1'; }, 1000);
+            }
+            if(stageId === 'stage-02') {
+                playSequence('seq-02', [1000, 3000, 6000, 9000, 12000]);
+                setTimeout(() => nextStage('stage-03'), 17000);
+            }
+            if(stageId === 'stage-03') {
+                playSequence('seq-03', [1000, 3000, 5000, 7000, 9000]);
+            }
+            if(stageId === 'stage-05') {
+                playSequence('seq-05', [1000, 3000, 5000, 7000]);
+            }
+            if(stageId === 'stage-06') {
+                playSequence('seq-06', [1000, 4000, 7000]);
+            }
+            if(stageId === 'stage-final') {
+                playSequence('seq-final', [1000, 4000, 8000, 11000, 14000, 17000]);
+                setTimeout(() => {
+                    const ps = document.getElementById('psButton');
+                    ps.classList.add('visible');
+                }, 20000);
+            }
+        }
+
+        // First Envelope
+        let env1Opened = false;
+        function openFirstEnvelope() {
+            if(env1Opened) return;
+            vibrate();
+            env1Opened = true;
+            const env = document.getElementById('first-envelope');
+            env.classList.add('open');
+            setTimeout(() => {
+                document.getElementById('promise-btn').style.display = 'block';
+            }, 1500);
+        }
+
+        // Memory Box
+        let openedEnvelopes = 0;
+        function openBox() {
+            vibrate();
+            document.getElementById('box-intro').style.display = 'none';
+            const grid = document.getElementById('env-grid');
+            
+            // Build envelopes
+            ENVELOPES_DATA.forEach((env, index) => {
+                const el = document.createElement('div');
+                el.className = 'mini-env';
+                el.innerHTML = `<span>ENVELOPE 0${index + 1}<br><br>${env.title}</span>`;
+                el.onclick = () => openMiniEnvelope(index, el);
+                grid.appendChild(el);
+            });
+            
+            grid.style.opacity = '1';
+        }
+
+        function openMiniEnvelope(index, el) {
+            vibrate();
+            if(!el.classList.contains('opened')) {
+                el.classList.add('opened');
+                openedEnvelopes++;
+            }
+            const modal = document.getElementById('reading-modal');
+            document.getElementById('reading-text').innerHTML = ENVELOPES_DATA[index].content;
+            modal.classList.add('active');
+        }
+
+        function closeReadingModal() {
+            vibrate();
+            document.getElementById('reading-modal').classList.remove('active');
+            if(openedEnvelopes === ENVELOPES_DATA.length) {
+                setTimeout(() => {
+                    nextStage('stage-05');
+                }, 1000);
+            }
+        }
+
+        // Big Letter
+        function openBigLetter() {
+            vibrate();
+            document.getElementById('big-reveal-intro').style.display = 'none';
+            document.getElementById('big-letter').classList.add('open');
+        }
+
+        function closeBigLetter() {
+            vibrate();
+            document.getElementById('big-letter').classList.remove('open');
+            setTimeout(() => {
+                nextStage('stage-06');
+            }, 1500);
+        }
+
+        // Final Box
+        let finalBoxOpened = false;
+        function openFinalBox(el) {
+            if(finalBoxOpened) return;
+            vibrate();
+            finalBoxOpened = true;
+            el.classList.add('open');
+            setTimeout(() => {
+                nextStage('stage-final');
+            }, 1500);
+        }
+
+        // P.S. Modal
+        function showPS() {
+            vibrate();
+            document.getElementById('ps-modal').classList.add('active');
+        }
+
+        // --- Particles System (Lightweight) ---
+        const canvas = document.getElementById('particles');
+        const ctx = canvas.getContext('2d');
+        let particlesArray = [];
+
+        function initCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        
+        window.addEventListener('resize', initCanvas);
+        initCanvas();
+
+        class Particle {
+            constructor() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.size = Math.random() * 1.5;
+                this.speedX = Math.random() * 0.5 - 0.25;
+                this.speedY = Math.random() * 0.5 - 0.25;
+                this.opacity = Math.random() * 0.5;
+            }
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+                if(this.x > canvas.width) this.x = 0;
+                if(this.x < 0) this.x = canvas.width;
+                if(this.y > canvas.height) this.y = 0;
+                if(this.y < 0) this.y = canvas.height;
+            }
+            draw() {
+                ctx.fillStyle = `rgba(197, 160, 89, ${this.opacity})`;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function initParticles() {
+            // Keep particle count low for performance
+            const count = window.innerWidth < 600 ? 30 : 60;
+            for(let i = 0; i < count; i++) {
+                particlesArray.push(new Particle());
+            }
+        }
+
+        function animateParticles() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for(let i = 0; i < particlesArray.length; i++) {
+                particlesArray[i].update();
+                particlesArray[i].draw();
+            }
+            requestAnimationFrame(animateParticles);
+        }
+
+        // Respect reduced motion
+        const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (!prefersReducedMotion) {
+            initParticles();
+            animateParticles();
+        }
+
+    </script>
+</body>
+</html>
